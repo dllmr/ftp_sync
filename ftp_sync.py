@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import ftplib
 import argparse
 from datetime import datetime
@@ -11,9 +12,12 @@ def ensure_local_dir(local_path: str) -> None:
     if not os.path.exists(local_path):
         os.makedirs(local_path)
 
-def process_directory(ftp: ftplib.FTP, remote_dir: str, local_dir: str, log_file: TextIO, delete_remote: bool = False, flatten: bool = False) -> None:
-    """Recursively download and optionally delete files from remote directory"""
+def process_directory(ftp: ftplib.FTP, remote_dir: str, local_dir: str, log_file: TextIO, delete_remote: bool = False, flatten: bool = False) -> bool:
+    """Recursively download and optionally delete files from remote directory
+    Returns True if all operations successful, False if any errors occurred"""
     print(f"Processing directory: {remote_dir}")
+    
+    success = True
     
     # Change to remote directory
     ftp.cwd(remote_dir)
@@ -50,11 +54,13 @@ def process_directory(ftp: ftplib.FTP, remote_dir: str, local_dir: str, log_file
             # Recursively process subdirectory
             if flatten:
                 # When flattening, continue using the same local_dir (root)
-                process_directory(ftp, remote_path, local_dir, log_file, delete_remote, flatten)
+                if not process_directory(ftp, remote_path, local_dir, log_file, delete_remote, flatten):
+                    success = False
             else:
                 # Normal behavior: create subdirectory
                 sub_local_path: str = os.path.join(local_dir, file_name)
-                process_directory(ftp, remote_path, sub_local_path, log_file, delete_remote, flatten)
+                if not process_directory(ftp, remote_path, sub_local_path, log_file, delete_remote, flatten):
+                    success = False
         else:
             # Determine local file path
             if flatten:
@@ -83,12 +89,16 @@ def process_directory(ftp: ftplib.FTP, remote_dir: str, local_dir: str, log_file
                 else:
                     log_file.write(f"{datetime.now()} - Download failed: {remote_path}\n")
                     print(f"Download failed: {remote_path}")
+                    success = False
             except Exception as e:
                 log_file.write(f"{datetime.now()} - Error processing {remote_path}: {str(e)}\n")
                 print(f"Error processing {remote_path}: {str(e)}")
+                success = False
     
     # Return to parent directory
     ftp.cwd('..')
+    
+    return success
 
 def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description='Recursively download files from FTP server with optional deletion')
@@ -109,6 +119,9 @@ def main() -> None:
     
     # Ensure local directory exists
     ensure_local_dir(args.local_dir)
+    
+    # Track overall success
+    overall_success = True
     
     # Open log file or null device
     log_file_path = os.devnull if args.no_log else 'ftp_sync.log'
@@ -137,16 +150,29 @@ def main() -> None:
                 print("🚫 No-log mode: File logging disabled")
             
             # Process directories recursively
-            process_directory(ftp, args.remote_dir, args.local_dir, log_file, args.delete_remote, args.flatten)
+            if not process_directory(ftp, args.remote_dir, args.local_dir, log_file, args.delete_remote, args.flatten):
+                overall_success = False
             
             # Close connection
             ftp.quit()
-            log_file.write(f"{datetime.now()} - FTP sync completed successfully ({operation_mode}{structure_mode})\n")
-            print(f"FTP sync completed successfully ({operation_mode}{structure_mode})")
+            
+            if overall_success:
+                log_file.write(f"{datetime.now()} - FTP sync completed successfully ({operation_mode}{structure_mode})\n")
+                print(f"FTP sync completed successfully ({operation_mode}{structure_mode})")
+            else:
+                log_file.write(f"{datetime.now()} - FTP sync completed with errors ({operation_mode}{structure_mode})\n")
+                print(f"FTP sync completed with errors ({operation_mode}{structure_mode})")
             
         except Exception as e:
             log_file.write(f"{datetime.now()} - Error: {str(e)}\n")
             print(f"Error: {str(e)}")
+            overall_success = False
+    
+    # Exit with appropriate code
+    if overall_success:
+        sys.exit(0)  # Success
+    else:
+        sys.exit(1)  # Failure
 
 if __name__ == "__main__":
     main()

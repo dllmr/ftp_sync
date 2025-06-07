@@ -12,6 +12,7 @@ A Python script that recursively downloads files from an FTP server with optiona
 - **Optional deletion**: Remote file deletion only when `--delete-remote` flag is used
 - **Flatten option**: Download all files to top-level directory, ignoring remote directory structure
 - **Flexible logging**: Optional logging with ability to disable log file creation
+- **Exit codes**: Returns appropriate exit codes for success/failure (useful for automation)
 - Recursively processes directories and subdirectories
 - Downloads files from FTP server to local directory
 - Comprehensive logging of all operations (when enabled)
@@ -162,6 +163,44 @@ Remote FTP:           Local Directory (Flattened):
 - Partial downloads are detected and logged as failures
 - The script continues processing other files even if individual files fail
 - Safe mode prevents accidental data loss
+- Proper exit codes indicate overall success or failure
+
+## Exit Codes
+
+The script returns standard Unix exit codes to indicate success or failure:
+
+| Exit Code | Description |
+|-----------|-------------|
+| `0` | **Success** - All files downloaded successfully, no errors occurred |
+| `1` | **Failure** - One or more errors occurred during operation |
+
+This makes the script suitable for use in:
+- **Automated scripts** and batch processing
+- **Cron jobs** for scheduled synchronization
+- **CI/CD pipelines** where success/failure detection is required
+- **Shell scripts** that need to check operation status
+
+### Usage in Shell Scripts
+
+```bash
+#!/bin/bash
+python3 ftp_sync.py -s ftp.example.com -u user -p pass -l ./downloads
+
+if [ $? -eq 0 ]; then
+    echo "FTP sync completed successfully"
+    # Continue with post-processing
+else
+    echo "FTP sync failed - check logs for details" >&2
+    exit 1
+fi
+```
+
+### Usage in Cron Jobs
+
+```bash
+# Run daily at 2 AM, log success/failure
+0 2 * * * /usr/bin/python3 /path/to/ftp_sync.py -s ftp.example.com -u user -p pass -l /backup/ftp && echo "FTP sync OK" || echo "FTP sync FAILED" | mail -s "FTP Sync Status" admin@example.com
+```
 
 ## Logging
 
